@@ -1,0 +1,863 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Kwaliteitscontrole</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+  :root{
+    --ink:#14181F; --ink-2:#1E2530;
+    --hi:#FFB703; --hi-press:#E6A302;
+    --paper:#F4F5F7; --card:#FFFFFF; --line:#E2E5EA;
+    --text:#1A1D23; --muted:#6B7280;
+    --ok:#15803D; --ok-bg:#DCFCE7; --ok-line:#86EFAC;
+    --nok:#DC2626; --nok-bg:#FEE2E2; --nok-line:#FCA5A5;
+    --na:#5A6675; --na-bg:#EDF0F4; --na-line:#CBD3DE;
+    --radius:14px; --shadow:0 1px 2px rgba(20,24,31,.06),0 4px 16px rgba(20,24,31,.06);
+    --font:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{margin:0;padding:0}
+  body{font-family:var(--font); color:var(--text); background:var(--paper); font-size:16px; line-height:1.45; -webkit-text-size-adjust:100%;}
+
+  /* Top bar */
+  .topbar{position:sticky; top:0; z-index:20; background:var(--ink); color:#fff;
+    padding:14px 18px; padding-top:calc(14px + env(safe-area-inset-top,0)); border-bottom:3px solid var(--hi);
+    display:flex; align-items:center; gap:12px;}
+  .brand{display:flex; flex-direction:column; line-height:1.1}
+  .brand .k{font-weight:800; letter-spacing:.14em; text-transform:uppercase; font-size:13px}
+  .brand .k b{color:var(--hi)}
+  .brand .s{font-size:11px; color:#9AA3AF; letter-spacing:.06em; margin-top:2px}
+  .topbar .spacer{flex:1}
+  .ghost-btn{background:transparent; border:1px solid #333B48; color:#C7CDD6; font-size:13px; font-weight:600;
+    padding:8px 12px; border-radius:10px; font-family:inherit; cursor:pointer;}
+  .ghost-btn:active{background:#222A35}
+
+  /* Nav */
+  nav.tabs{position:sticky; top:0; z-index:15; background:#fff; border-bottom:1px solid var(--line); display:flex; overflow-x:auto}
+  nav.tabs button{flex:1 0 auto; min-width:96px; background:none; border:none; font-family:inherit; font-size:13.5px; font-weight:700;
+    color:var(--muted); padding:13px 10px; cursor:pointer; border-bottom:3px solid transparent; white-space:nowrap}
+  nav.tabs button.active{color:var(--ink); border-bottom-color:var(--hi)}
+
+  main{max-width:820px; margin:0 auto; padding:16px 14px 110px}
+  .view{display:none} .view.active{display:block}
+
+  .card{background:var(--card); border:1px solid var(--line); border-radius:var(--radius); box-shadow:var(--shadow); margin-bottom:16px; overflow:hidden;}
+  .card-head{display:flex; align-items:center; gap:10px; padding:14px 16px; border-bottom:1px solid var(--line); background:#FBFBFC;}
+  .card-head .eyebrow{font-size:11px; font-weight:800; letter-spacing:.12em; text-transform:uppercase; color:var(--muted);}
+  .card-head .count{margin-left:auto; font-size:12px; font-weight:700; color:var(--muted); background:#EEF1F5; padding:3px 9px; border-radius:20px;}
+  .card-body{padding:16px}
+
+  label.field{display:block; margin-bottom:12px} label.field:last-child{margin-bottom:0}
+  .field .lbl{display:block; font-size:12px; font-weight:700; color:var(--muted); text-transform:uppercase; letter-spacing:.05em; margin-bottom:6px;}
+  input[type=text], input[type=email], input[type=password], input[type=date], select, textarea{
+    width:100%; font-family:inherit; font-size:16px; color:var(--text); padding:11px 12px; border:1px solid var(--line);
+    border-radius:10px; background:#fff; outline:none;}
+  input:focus, textarea:focus, select:focus{border-color:var(--hi); box-shadow:0 0 0 3px rgba(255,183,3,.18)}
+  textarea{resize:vertical; min-height:60px}
+  .grid2{display:grid; grid-template-columns:1fr 1fr; gap:12px} @media (max-width:520px){ .grid2{grid-template-columns:1fr} }
+
+  /* Checkpoint */
+  .cp{border:1px solid var(--line); border-radius:12px; margin-bottom:14px; overflow:hidden; background:#fff}
+  .cp:last-child{margin-bottom:0}
+  .cp-top{display:flex; align-items:flex-start; gap:10px; padding:12px 12px 0}
+  .cp-num{flex:0 0 auto; width:28px; height:28px; border-radius:8px; background:var(--ink); color:var(--hi); font-weight:800; font-size:13px;
+    display:flex; align-items:center; justify-content:center; margin-top:3px;}
+  .cp-title{flex:1}
+  .cp-title input{border:none; padding:6px 4px; font-size:16px; font-weight:600}
+  .cp-title input:focus{box-shadow:none; border-bottom:2px solid var(--hi); border-radius:0}
+  .cp-del{flex:0 0 auto; border:none; background:transparent; color:#B4BAC3; font-size:22px; line-height:1; padding:4px 8px; cursor:pointer; border-radius:8px;}
+  .cp-del:active{background:#F1F3F6; color:var(--nok)}
+  .cp-body{padding:6px 12px 14px}
+  .status-row{display:flex; gap:8px; margin:8px 0 12px}
+  .status-row button{flex:1; font-family:inherit; font-size:14px; font-weight:700; padding:11px 6px; border-radius:10px;
+    border:1.5px solid var(--line); background:#fff; color:var(--muted); cursor:pointer; transition:transform .04s ease;}
+  .status-row button:active{transform:scale(.97)}
+  .status-row button[data-on="ok"].active{background:var(--ok-bg); border-color:var(--ok-line); color:var(--ok)}
+  .status-row button[data-on="nok"].active{background:var(--nok-bg); border-color:var(--nok-line); color:var(--nok)}
+  .status-row button[data-on="na"].active{background:var(--na-bg); border-color:var(--na-line); color:var(--na)}
+  .photo-row{display:flex; flex-wrap:wrap; gap:8px; margin-top:10px}
+  .thumb{position:relative; width:74px; height:74px; border-radius:10px; overflow:hidden; border:1px solid var(--line)}
+  .thumb img{width:100%; height:100%; object-fit:cover; display:block}
+  .thumb .x{position:absolute; top:2px; right:2px; width:22px; height:22px; border-radius:50%; background:rgba(20,24,31,.72); color:#fff;
+    border:none; font-size:14px; line-height:22px; text-align:center; cursor:pointer; padding:0;}
+  .addphoto{width:74px; height:74px; border-radius:10px; border:1.5px dashed #C4CBD4; background:#FAFBFC; display:flex; flex-direction:column;
+    align-items:center; justify-content:center; gap:3px; color:var(--muted); font-size:11px; font-weight:600; cursor:pointer;}
+  .addphoto svg{width:20px; height:20px} .addphoto input{display:none}
+  .add-cp{width:100%; padding:13px; border:1.5px dashed #C4CBD4; background:#FAFBFC; color:#3B4453; border-radius:12px; font-family:inherit; font-size:15px; font-weight:700; cursor:pointer;}
+  .add-cp:active{background:#F1F3F6}
+
+  .tally{display:flex; gap:10px; margin-bottom:14px}
+  .tally .pill{flex:1; text-align:center; padding:12px 6px; border-radius:12px; border:1px solid var(--line)}
+  .tally .pill .n{font-size:24px; font-weight:800; line-height:1}
+  .tally .pill .t{font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.05em; margin-top:4px; color:var(--muted)}
+  .tally .ok{background:var(--ok-bg); border-color:var(--ok-line)} .tally .ok .n{color:var(--ok)}
+  .tally .nok{background:var(--nok-bg); border-color:var(--nok-line)} .tally .nok .n{color:var(--nok)}
+  .tally .na{background:var(--na-bg); border-color:var(--na-line)} .tally .na .n{color:var(--na)}
+  .verdict{display:flex; align-items:center; gap:10px; padding:12px 14px; border-radius:12px; font-weight:700; font-size:15px; margin-bottom:14px;}
+  .verdict.pass{background:var(--ok-bg); color:var(--ok); border:1px solid var(--ok-line)}
+  .verdict.fail{background:var(--nok-bg); color:var(--nok); border:1px solid var(--nok-line)}
+  .verdict.empty{background:#EEF1F5; color:var(--muted); border:1px solid var(--line)}
+
+  .sig-wrap{border:1px solid var(--line); border-radius:12px; overflow:hidden; background:#fff}
+  .sig-canvas{display:block; width:100%; height:150px; touch-action:none; background:#fff}
+  .sig-foot{display:flex; align-items:center; padding:8px 12px; border-top:1px solid var(--line); background:#FBFBFC}
+  .sig-foot span{font-size:12px; color:var(--muted)}
+  .sig-foot button{margin-left:auto; background:none; border:none; color:var(--nok); font-weight:600; font-size:13px; cursor:pointer; font-family:inherit}
+  .hint{font-size:12px; color:var(--muted); margin-top:10px}
+
+  /* Buttons / actionbar */
+  .actionbar{position:fixed; left:0; right:0; bottom:0; z-index:30; background:rgba(255,255,255,.94); backdrop-filter:saturate(1.4) blur(8px);
+    border-top:1px solid var(--line); padding:12px 14px calc(12px + env(safe-area-inset-bottom,0)) 14px; display:flex; gap:10px; max-width:820px; margin:0 auto;}
+  .btn{flex:1; font-family:inherit; font-size:15px; font-weight:800; padding:15px 10px; border-radius:12px; border:none; cursor:pointer;
+    display:flex; align-items:center; justify-content:center; gap:8px;}
+  .btn svg{width:18px; height:18px}
+  .btn.primary{background:var(--hi); color:var(--ink)} .btn.primary:active{background:var(--hi-press)}
+  .btn.dark{background:var(--ink); color:#fff} .btn.dark:active{background:var(--ink-2)}
+  .btn.small{padding:10px 14px; flex:0 0 auto; font-size:14px}
+  .btn:disabled{opacity:.5}
+
+  .toast{position:fixed; left:50%; bottom:96px; transform:translateX(-50%) translateY(20px); background:var(--ink); color:#fff; padding:12px 18px;
+    border-radius:12px; font-size:14px; font-weight:600; opacity:0; pointer-events:none; transition:.25s; z-index:50; max-width:90%; text-align:center;}
+  .toast.show{opacity:1; transform:translateX(-50%) translateY(0)}
+
+  /* Auth */
+  .auth-wrap{min-height:100vh; display:flex; align-items:center; justify-content:center; padding:24px; background:var(--ink)}
+  .auth-card{background:#fff; border-radius:18px; padding:26px 22px; width:100%; max-width:380px; box-shadow:0 20px 60px rgba(0,0,0,.35)}
+  .auth-card .logo{font-weight:800; letter-spacing:.14em; text-transform:uppercase; font-size:15px; margin-bottom:2px}
+  .auth-card .logo b{color:var(--hi-press)}
+  .auth-card .sub{color:var(--muted); font-size:13px; margin-bottom:20px}
+  .auth-card .btn{width:100%; margin-top:6px}
+  .auth-switch{text-align:center; margin-top:14px; font-size:14px; color:var(--muted)}
+  .auth-switch a{color:#1D4ED8; font-weight:600; cursor:pointer}
+  .auth-msg{font-size:13px; padding:10px 12px; border-radius:10px; margin-top:12px; display:none}
+  .auth-msg.err{display:block; background:var(--nok-bg); color:var(--nok)}
+  .auth-msg.ok{display:block; background:var(--ok-bg); color:var(--ok)}
+
+  /* Setup notice */
+  .setup{max-width:640px; margin:40px auto; background:#fff; border:1px solid var(--line); border-radius:16px; padding:24px; box-shadow:var(--shadow)}
+  .setup h2{margin:0 0 6px; font-size:18px}
+  .setup code{background:#F1F3F6; padding:2px 6px; border-radius:6px; font-size:13px}
+  .setup ol{padding-left:18px} .setup li{margin-bottom:8px}
+
+  /* Analytics */
+  .kpi-row{display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-bottom:16px}
+  .kpi{background:#fff; border:1px solid var(--line); border-radius:12px; padding:14px 16px; box-shadow:var(--shadow)}
+  .kpi .n{font-size:26px; font-weight:800; line-height:1}
+  .kpi .l{font-size:12px; font-weight:700; color:var(--muted); text-transform:uppercase; letter-spacing:.05em; margin-top:4px}
+  .lead{background:var(--ink); color:#fff; border-radius:14px; padding:16px 18px; margin-bottom:16px}
+  .lead .cap{font-size:11px; letter-spacing:.12em; text-transform:uppercase; color:var(--hi); font-weight:800}
+  .lead .big{font-size:22px; font-weight:800; margin-top:4px}
+  .lead .sub{color:#AAB2BD; font-size:13px; margin-top:2px}
+  .rank{list-style:none; margin:0; padding:0}
+  .rank li{display:flex; align-items:center; gap:12px; padding:11px 4px; border-bottom:1px solid var(--line)}
+  .rank li:last-child{border-bottom:none}
+  .rank .name{font-weight:700; flex:1}
+  .rank .bar{height:8px; border-radius:4px; background:var(--nok); min-width:6px}
+  .rank .barwrap{flex:2; background:#F1F3F6; border-radius:4px; overflow:hidden}
+  .rank .val{font-weight:800; width:34px; text-align:right}
+  .rank .rate{font-size:12px; color:var(--muted); width:64px; text-align:right}
+  .chart-box{position:relative; height:240px}
+
+  /* History list */
+  .hrow{display:flex; align-items:center; gap:12px; padding:14px 16px; border-bottom:1px solid var(--line); cursor:pointer}
+  .hrow:last-child{border-bottom:none}
+  .hrow:active{background:#FAFBFC}
+  .hrow .main{flex:1; min-width:0}
+  .hrow .t1{font-weight:700; white-space:nowrap; overflow:hidden; text-overflow:ellipsis}
+  .hrow .t2{font-size:13px; color:var(--muted); margin-top:2px}
+  .badge{font-size:11px; font-weight:800; padding:4px 8px; border-radius:20px}
+  .badge.pass{background:var(--ok-bg); color:var(--ok)}
+  .badge.fail{background:var(--nok-bg); color:var(--nok)}
+  .badge.empty{background:#EEF1F5; color:var(--muted)}
+  .empty-state{text-align:center; color:var(--muted); padding:40px 20px; font-size:14px}
+
+  .tm-row{display:flex; align-items:center; gap:10px; padding:10px 0; border-bottom:1px solid var(--line)}
+  .tm-row:last-child{border-bottom:none}
+  .tm-row .nm{flex:1; font-weight:600}
+  .tm-row .rl{font-size:12px; color:var(--muted); background:#EEF1F5; padding:3px 9px; border-radius:20px}
+  .tm-row .del{border:none; background:none; color:#B4BAC3; font-size:20px; cursor:pointer}
+  .spinner{display:inline-block; width:16px; height:16px; border:2px solid rgba(255,255,255,.4); border-top-color:#fff; border-radius:50%; animation:spin .7s linear infinite; vertical-align:middle}
+  @keyframes spin{to{transform:rotate(360deg)}}
+</style>
+</head>
+<body>
+
+<!-- SETUP NOTICE (shown if config not filled) -->
+<div id="setupNotice" class="setup" style="display:none">
+  <h2>Nog even instellen</h2>
+  <p>Vul bovenaan in de code je Supabase-gegevens in bij <code>SUPABASE_URL</code> en <code>SUPABASE_ANON_KEY</code>. Daarna werkt inloggen en opslaan. Het volledige stappenplan staat in het bericht hieronder in de chat.</p>
+</div>
+
+<!-- AUTH VIEW -->
+<div id="authView" class="auth-wrap" style="display:none">
+  <div class="auth-card">
+    <div class="logo">KWALITEITS<b>CONTROLE</b></div>
+    <div class="sub" id="authSub">Log in om te beginnen</div>
+    <label class="field"><span class="lbl">E-mail</span><input type="email" id="authEmail" autocomplete="email" placeholder="jij@bedrijf.nl"></label>
+    <label class="field"><span class="lbl">Wachtwoord</span><input type="password" id="authPass" autocomplete="current-password" placeholder="••••••••"></label>
+    <button class="btn primary" id="authBtn">Inloggen</button>
+    <div class="auth-msg" id="authMsg"></div>
+    <div class="auth-switch" id="authSwitch">Nog geen account? <a id="authToggle">Registreren</a></div>
+  </div>
+</div>
+
+<!-- APP VIEW -->
+<div id="appView" style="display:none">
+  <header class="topbar">
+    <div class="brand"><div class="k">KWALITEITS<b>CONTROLE</b></div><div class="s" id="userEmail">—</div></div>
+    <div class="spacer"></div>
+    <button class="ghost-btn" id="logoutBtn">Uitloggen</button>
+  </header>
+
+  <nav class="tabs">
+    <button data-tab="controle" class="active">Nieuwe controle</button>
+    <button data-tab="historie">Historie</button>
+    <button data-tab="analyse">Analyse</button>
+    <button data-tab="team">Team</button>
+  </nav>
+
+  <main>
+    <!-- CONTROLE -->
+    <section class="view active" id="view-controle">
+      <div class="card">
+        <div class="card-head"><span class="eyebrow">Gegevens</span></div>
+        <div class="card-body">
+          <div class="grid2">
+            <label class="field"><span class="lbl">Bedrijf</span><input type="text" id="f_bedrijf" placeholder="Bedrijfsnaam"></label>
+            <label class="field"><span class="lbl">Referentie / ordernr.</span><input type="text" id="f_ref" placeholder="Optioneel"></label>
+            <label class="field"><span class="lbl">Project / opdracht</span><input type="text" id="f_project" placeholder="Omschrijving"></label>
+            <label class="field"><span class="lbl">Locatie / adres</span><input type="text" id="f_locatie" placeholder="Straat, plaats"></label>
+            <label class="field"><span class="lbl">Monteur / chauffeur</span><select id="f_monteur"><option value="">— kies —</option></select></label>
+            <label class="field"><span class="lbl">Inspecteur</span><input type="text" id="f_inspecteur" placeholder="Naam"></label>
+            <label class="field"><span class="lbl">Datum</span><input type="date" id="f_datum"></label>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-head"><span class="eyebrow">Controlepunten</span><span class="count" id="cpCount">0</span></div>
+        <div class="card-body">
+          <div id="cpList"></div>
+          <button class="add-cp" id="addCp" style="margin-top:14px">+ Controlepunt toevoegen</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-head"><span class="eyebrow">Samenvatting</span></div>
+        <div class="card-body">
+          <div class="tally">
+            <div class="pill ok"><div class="n" id="tOk">0</div><div class="t">OK</div></div>
+            <div class="pill nok"><div class="n" id="tNok">0</div><div class="t">Niet OK</div></div>
+            <div class="pill na"><div class="n" id="tNa">0</div><div class="t">N.v.t.</div></div>
+          </div>
+          <div class="verdict empty" id="verdict">Nog geen punten beoordeeld</div>
+          <label class="field"><span class="lbl">Conclusie / opmerkingen</span><textarea id="f_conclusie" placeholder="Algemene bevindingen, vervolgacties…"></textarea></label>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-head"><span class="eyebrow">Akkoord</span></div>
+        <div class="card-body">
+          <div class="sig-wrap">
+            <canvas class="sig-canvas" id="sig"></canvas>
+            <div class="sig-foot"><span>Handtekening inspecteur</span><button id="sigClear">Wissen</button></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- HISTORIE -->
+    <section class="view" id="view-historie">
+      <div class="card">
+        <div class="card-head"><span class="eyebrow">Opgeslagen controles</span><span class="count" id="histCount">0</span></div>
+        <div id="histList"><div class="empty-state">Laden…</div></div>
+      </div>
+      <div id="histDetail"></div>
+    </section>
+
+    <!-- ANALYSE -->
+    <section class="view" id="view-analyse">
+      <div id="analyseBody"><div class="empty-state">Laden…</div></div>
+    </section>
+
+    <!-- TEAM -->
+    <section class="view" id="view-team">
+      <div class="card">
+        <div class="card-head"><span class="eyebrow">Monteurs &amp; chauffeurs</span></div>
+        <div class="card-body">
+          <div class="grid2" style="align-items:end">
+            <label class="field"><span class="lbl">Naam</span><input type="text" id="tmName" placeholder="Voor- en achternaam"></label>
+            <label class="field"><span class="lbl">Rol</span><select id="tmRole"><option value="monteur">Monteur</option><option value="chauffeur">Chauffeur</option></select></label>
+          </div>
+          <button class="btn primary small" id="tmAdd" style="margin-top:4px">Toevoegen</button>
+          <div id="tmList" style="margin-top:16px"></div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <div class="actionbar" id="controleActions">
+    <button class="btn dark" id="shareBtn">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8"/><polyline points="16 6 12 2 8 6"/><line x1="12" y1="2" x2="12" y2="15"/></svg>
+      PDF
+    </button>
+    <button class="btn primary" id="saveBtn">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+      Opslaan
+    </button>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+"use strict";
+
+/* ============================================================
+   CONFIG — vul hier je Supabase-gegevens in
+   ============================================================ */
+const SUPABASE_URL = "https://nydeshsugxmqfixuvrua.supabase.co";
+const SUPABASE_ANON_KEY = "sb_publishable_Ai4ylznCLHxBlxG-73Yn9g_ycrFxz71";
+/* ============================================================ */
+
+const $ = (id) => document.getElementById(id);
+let sb = null;
+
+/* State */
+let checkpoints = [];
+let team = [];
+let cpSeq = 0;
+let currentUser = null;
+
+const SEED = ["Algemene staat en netheid werkplek","Uitvoering volgens tekening/afspraak","Afwerking en aansluitingen"];
+
+/* ---------- Zichtbare foutmelding (mobiel heeft geen console) ---------- */
+function showFatal(msg){
+  let el = document.getElementById("fatalBox");
+  if(!el){
+    el = document.createElement("div"); el.id = "fatalBox";
+    el.style.cssText = "position:fixed;inset:0;z-index:9999;background:#111;color:#fff;padding:24px;"
+      + "font:14px/1.5 -apple-system,Segoe UI,Roboto,sans-serif;overflow:auto";
+    document.body.appendChild(el);
+  }
+  el.innerHTML = '<div style="max-width:520px;margin:40px auto;background:#1E2530;border:1px solid #333B48;'
+    + 'border-radius:14px;padding:20px"><div style="color:#FFB703;font-weight:800;letter-spacing:.1em;'
+    + 'text-transform:uppercase;font-size:12px;margin-bottom:8px">Er ging iets mis bij het laden</div>'
+    + '<div>' + msg + '</div></div>';
+}
+window.addEventListener("error", (e) => {
+  showFatal("Foutmelding: " + (e.message || e.error || "onbekend")
+    + "<br><br>Open het bestand in Safari of Chrome met internet aan. Draait het in een preview-venster, "
+    + "dan worden externe onderdelen soms geblokkeerd.");
+});
+
+/* ---------- Boot ---------- */
+if(!SUPABASE_URL || !SUPABASE_ANON_KEY){
+  $("setupNotice").style.display = "block";
+} else if(typeof supabase === "undefined" || !supabase.createClient){
+  showFatal("De Supabase-bibliotheek kon niet geladen worden. Dit gebeurt als je geen internet hebt, "
+    + "of als het bestand in een preview-venster draait dat externe scripts blokkeert. "
+    + "Open het bestand in Safari of Chrome met internet aan.");
+} else {
+  try{
+    sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+    initApp();
+  }catch(err){
+    showFatal("Kon geen verbinding maken met Supabase: " + (err.message || err));
+  }
+}
+
+async function initApp(){
+  const { data:{ session } } = await sb.auth.getSession();
+  if(session){ enterApp(session.user); } else { showAuth(); }
+  sb.auth.onAuthStateChange((_e, s) => {
+    if(s && s.user){ enterApp(s.user); } else { showAuth(); }
+  });
+}
+
+/* ---------- Auth UI ---------- */
+let authMode = "login";
+function showAuth(){
+  $("appView").style.display = "none";
+  $("authView").style.display = "flex";
+}
+$("authToggle").addEventListener("click", () => {
+  authMode = authMode === "login" ? "signup" : "login";
+  $("authSub").textContent = authMode === "login" ? "Log in om te beginnen" : "Maak een account aan";
+  $("authBtn").textContent = authMode === "login" ? "Inloggen" : "Registreren";
+  $("authSwitch").innerHTML = authMode === "login"
+    ? 'Nog geen account? <a id="authToggle2">Registreren</a>'
+    : 'Al een account? <a id="authToggle2">Inloggen</a>';
+  document.getElementById("authToggle2").addEventListener("click", () => $("authToggle").click());
+  authMsg("");
+});
+function authMsg(txt, kind){
+  const m = $("authMsg"); m.className = "auth-msg" + (kind ? " "+kind : ""); m.textContent = txt || "";
+}
+$("authBtn").addEventListener("click", async () => {
+  const email = $("authEmail").value.trim();
+  const pass = $("authPass").value;
+  if(!email || !pass){ authMsg("Vul e-mail en wachtwoord in.","err"); return; }
+  $("authBtn").disabled = true; $("authBtn").innerHTML = '<span class="spinner"></span>';
+  try{
+    if(authMode === "login"){
+      const { error } = await sb.auth.signInWithPassword({ email, password:pass });
+      if(error) throw error;
+    } else {
+      const { error } = await sb.auth.signUp({ email, password:pass });
+      if(error) throw error;
+      authMsg("Account aangemaakt. Als e-mailbevestiging aanstaat: check je inbox, log daarna in.","ok");
+    }
+  }catch(err){ authMsg(vertaalAuthfout(err.message),"err"); }
+  finally{ $("authBtn").disabled=false; $("authBtn").textContent = authMode==="login"?"Inloggen":"Registreren"; }
+});
+function vertaalAuthfout(m){
+  if(/Invalid login/i.test(m)) return "Onjuiste e-mail of wachtwoord.";
+  if(/already registered/i.test(m)) return "Dit e-mailadres bestaat al. Log in.";
+  if(/at least 6/i.test(m)) return "Wachtwoord moet minstens 6 tekens zijn.";
+  return m;
+}
+$("logoutBtn").addEventListener("click", async () => { await sb.auth.signOut(); });
+
+/* ---------- Enter app ---------- */
+let appReady = false;
+function enterApp(user){
+  currentUser = user;
+  $("authView").style.display = "none";
+  $("appView").style.display = "block";
+  $("userEmail").textContent = user.email || "";
+  if(!appReady){ buildFormOnce(); appReady = true; }
+  loadTeam();
+}
+
+/* ---------- Tabs ---------- */
+document.querySelectorAll("nav.tabs button").forEach(b => {
+  b.addEventListener("click", () => {
+    document.querySelectorAll("nav.tabs button").forEach(x => x.classList.remove("active"));
+    b.classList.add("active");
+    const tab = b.dataset.tab;
+    document.querySelectorAll(".view").forEach(v => v.classList.remove("active"));
+    $("view-"+tab).classList.add("active");
+    $("controleActions").style.display = (tab === "controle") ? "flex" : "none";
+    if(tab === "historie") loadHistory();
+    if(tab === "analyse") loadAnalytics();
+    if(tab === "team") renderTeam();
+    window.scrollTo({top:0});
+  });
+});
+
+/* ---------- Form (once) ---------- */
+function todayISO(){ const d=new Date(); const o=d.getTimezoneOffset(); return new Date(d.getTime()-o*60000).toISOString().slice(0,10); }
+function buildFormOnce(){
+  $("f_datum").value = todayISO();
+  checkpoints = []; SEED.forEach(t => addCheckpoint(t,false));
+  renderCheckpoints(); updateTally();
+  setTimeout(sizeSig, 40);
+}
+
+/* ---------- Checkpoints ---------- */
+function addCheckpoint(title=""){ checkpoints.push({ id:++cpSeq, title, status:null, note:"", photos:[] }); }
+function removeCheckpoint(id){ checkpoints = checkpoints.filter(c=>c.id!==id); renderCheckpoints(); updateTally(); }
+function setStatus(id,s){ const c=checkpoints.find(x=>x.id===id); if(!c)return; c.status=(c.status===s)?null:s; renderCheckpoints(); updateTally(); }
+
+function renderCheckpoints(){
+  const list = $("cpList"); list.innerHTML="";
+  checkpoints.forEach((c,i)=>{
+    const el=document.createElement("div"); el.className="cp";
+    el.innerHTML=`
+      <div class="cp-top">
+        <div class="cp-num">${i+1}</div>
+        <div class="cp-title"><input type="text" placeholder="Omschrijving controlepunt" data-role="title"></div>
+        <button class="cp-del" data-role="del">&times;</button>
+      </div>
+      <div class="cp-body">
+        <div class="status-row">
+          <button data-on="ok"  class="${c.status==='ok'?'active':''}" data-role="st" data-s="ok">OK</button>
+          <button data-on="nok" class="${c.status==='nok'?'active':''}" data-role="st" data-s="nok">Niet OK</button>
+          <button data-on="na"  class="${c.status==='na'?'active':''}" data-role="st" data-s="na">N.v.t.</button>
+        </div>
+        <textarea placeholder="Opmerking (optioneel)" data-role="note"></textarea>
+        <div class="photo-row" data-role="photos"></div>
+      </div>`;
+    const ti=el.querySelector('[data-role="title"]'); ti.value=c.title;
+    ti.addEventListener("input",e=>c.title=e.target.value);
+    el.querySelector('[data-role="del"]').addEventListener("click",()=>{ if(confirm("Controlepunt verwijderen?")) removeCheckpoint(c.id); });
+    el.querySelectorAll('[data-role="st"]').forEach(b=>b.addEventListener("click",()=>setStatus(c.id,b.dataset.s)));
+    const ne=el.querySelector('[data-role="note"]'); ne.value=c.note; ne.addEventListener("input",e=>c.note=e.target.value);
+    const pr=el.querySelector('[data-role="photos"]');
+    c.photos.forEach((p,pi)=>{
+      const t=document.createElement("div"); t.className="thumb";
+      t.innerHTML=`<img src="${p.dataUrl}" alt=""><button class="x">&times;</button>`;
+      t.querySelector(".x").addEventListener("click",()=>{ c.photos.splice(pi,1); renderCheckpoints(); });
+      pr.appendChild(t);
+    });
+    const add=document.createElement("label"); add.className="addphoto";
+    add.innerHTML=`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>Foto<input type="file" accept="image/*" multiple>`;
+    add.querySelector("input").addEventListener("change",e=>handlePhotos(e,c.id));
+    pr.appendChild(add);
+    list.appendChild(el);
+  });
+  $("cpCount").textContent = checkpoints.length;
+}
+$("addCp").addEventListener("click",()=>{ addCheckpoint(""); renderCheckpoints(); updateTally(); });
+
+/* ---------- Photos ---------- */
+function handlePhotos(evt,cpId){
+  const files=Array.from(evt.target.files||[]); const c=checkpoints.find(x=>x.id===cpId); if(!c)return;
+  let pending=files.length; if(!pending)return;
+  files.forEach(f=>compressImage(f,1400,0.72).then(img=>{ c.photos.push(img); if(--pending===0){ renderCheckpoints(); } })
+    .catch(()=>{ if(--pending===0) renderCheckpoints(); }));
+  evt.target.value="";
+}
+function compressImage(file,maxDim,quality){
+  return new Promise((res,rej)=>{
+    const r=new FileReader();
+    r.onload=()=>{ const img=new Image();
+      img.onload=()=>{ let {width:w,height:h}=img;
+        if(w>maxDim||h>maxDim){ if(w>=h){h=Math.round(h*maxDim/w);w=maxDim;} else {w=Math.round(w*maxDim/h);h=maxDim;} }
+        const cv=document.createElement("canvas"); cv.width=w; cv.height=h;
+        cv.getContext("2d").drawImage(img,0,0,w,h);
+        res({ dataUrl:cv.toDataURL("image/jpeg",quality), w, h }); };
+      img.onerror=rej; img.src=r.result; };
+    r.onerror=rej; r.readAsDataURL(file);
+  });
+}
+
+/* ---------- Tally ---------- */
+function updateTally(){
+  let ok=0,nok=0,na=0;
+  checkpoints.forEach(c=>{ if(c.status==='ok')ok++; else if(c.status==='nok')nok++; else if(c.status==='na')na++; });
+  $("tOk").textContent=ok; $("tNok").textContent=nok; $("tNa").textContent=na;
+  const v=$("verdict"), rated=ok+nok+na;
+  if(rated===0){ v.className="verdict empty"; v.textContent="Nog geen punten beoordeeld"; }
+  else if(nok>0){ v.className="verdict fail"; v.textContent=`Aandachtspunten: ${nok} punt(en) niet in orde`; }
+  else { v.className="verdict pass"; v.textContent="Akkoord — alle beoordeelde punten in orde"; }
+}
+
+/* ---------- Signature ---------- */
+const sigCanvas=$("sig"), sctx=sigCanvas.getContext("2d");
+let drawing=false, hasSig=false, lastX=0, lastY=0;
+function sizeSig(){
+  const ratio=window.devicePixelRatio||1, rect=sigCanvas.getBoundingClientRect();
+  if(rect.width===0) return;
+  const data=hasSig?sigCanvas.toDataURL():null;
+  sigCanvas.width=rect.width*ratio; sigCanvas.height=rect.height*ratio;
+  sctx.setTransform(ratio,0,0,ratio,0,0);
+  sctx.lineWidth=2.2; sctx.lineCap="round"; sctx.lineJoin="round"; sctx.strokeStyle="#14181F";
+  if(data){ const im=new Image(); im.onload=()=>sctx.drawImage(im,0,0,rect.width,rect.height); im.src=data; }
+}
+function sigPos(e){ const r=sigCanvas.getBoundingClientRect(); const p=e.touches?e.touches[0]:e; return {x:p.clientX-r.left,y:p.clientY-r.top}; }
+function sigStart(e){ e.preventDefault(); drawing=true; const p=sigPos(e); lastX=p.x; lastY=p.y; }
+function sigMove(e){ if(!drawing)return; e.preventDefault(); const p=sigPos(e);
+  sctx.beginPath(); sctx.moveTo(lastX,lastY); sctx.lineTo(p.x,p.y); sctx.stroke(); lastX=p.x; lastY=p.y; hasSig=true; }
+function sigEnd(){ drawing=false; }
+sigCanvas.addEventListener("mousedown",sigStart); sigCanvas.addEventListener("mousemove",sigMove); window.addEventListener("mouseup",sigEnd);
+sigCanvas.addEventListener("touchstart",sigStart,{passive:false}); sigCanvas.addEventListener("touchmove",sigMove,{passive:false}); sigCanvas.addEventListener("touchend",sigEnd);
+$("sigClear").addEventListener("click",()=>{ sctx.clearRect(0,0,sigCanvas.width,sigCanvas.height); hasSig=false; });
+window.addEventListener("resize",sizeSig);
+
+/* ---------- Toast ---------- */
+let toastT;
+function toast(msg){ const t=$("toast"); t.textContent=msg; t.classList.add("show"); clearTimeout(toastT); toastT=setTimeout(()=>t.classList.remove("show"),2600); }
+
+/* ---------- Team ---------- */
+async function loadTeam(){
+  const { data, error } = await sb.from("team_members").select("*").order("name");
+  if(error){ console.error(error); return; }
+  team = data || [];
+  fillMonteurSelect(); renderTeam();
+}
+function fillMonteurSelect(){
+  const sel=$("f_monteur"); const cur=sel.value;
+  sel.innerHTML='<option value="">— kies —</option>';
+  team.filter(t=>t.active!==false).forEach(t=>{
+    const o=document.createElement("option"); o.value=t.id; o.textContent=`${t.name} (${t.role})`; sel.appendChild(o);
+  });
+  sel.value=cur;
+}
+function renderTeam(){
+  const box=$("tmList"); box.innerHTML="";
+  if(!team.length){ box.innerHTML='<div class="empty-state">Nog geen teamleden. Voeg er hierboven een toe.</div>'; return; }
+  team.forEach(t=>{
+    const r=document.createElement("div"); r.className="tm-row";
+    r.innerHTML=`<span class="nm">${escapeHtml(t.name)}</span><span class="rl">${t.role}</span><button class="del" title="Verwijderen">&times;</button>`;
+    r.querySelector(".del").addEventListener("click",async()=>{
+      if(!confirm(`${t.name} verwijderen uit het team?`)) return;
+      const { error }=await sb.from("team_members").delete().eq("id",t.id);
+      if(error){ toast("Verwijderen mislukt"); return; }
+      await loadTeam();
+    });
+    box.appendChild(r);
+  });
+}
+$("tmAdd").addEventListener("click",async()=>{
+  const name=$("tmName").value.trim(), role=$("tmRole").value;
+  if(!name){ toast("Vul een naam in"); return; }
+  const { error }=await sb.from("team_members").insert({ name, role });
+  if(error){ toast("Toevoegen mislukt"); console.error(error); return; }
+  $("tmName").value="";
+  await loadTeam(); toast("Teamlid toegevoegd");
+});
+
+/* ---------- Save inspection ---------- */
+$("saveBtn").addEventListener("click", async () => {
+  const rated = checkpoints.filter(c=>c.status).length;
+  if(rated===0 && !$("f_project").value.trim()){ if(!confirm("Er is nog weinig ingevuld. Toch opslaan?")) return; }
+  const btn=$("saveBtn"); btn.disabled=true; const orig=btn.innerHTML; btn.innerHTML='<span class="spinner"></span>';
+  try{
+    let ok=0,nok=0,na=0;
+    checkpoints.forEach(c=>{ if(c.status==='ok')ok++; else if(c.status==='nok')nok++; else if(c.status==='na')na++; });
+    const verdict = (ok+nok+na)===0 ? "empty" : (nok>0 ? "fail" : "pass");
+    const monteurId=$("f_monteur").value || null;
+    const monteurName = monteurId ? (team.find(t=>t.id===monteurId)||{}).name : null;
+
+    const { data:ins, error:e1 } = await sb.from("inspections").insert({
+      inspector_name:$("f_inspecteur").value.trim(), company:$("f_bedrijf").value.trim(),
+      project:$("f_project").value.trim(), location:$("f_locatie").value.trim(),
+      reference:$("f_ref").value.trim(), monteur_id:monteurId, monteur_name:monteurName,
+      inspection_date:$("f_datum").value||null, conclusion:$("f_conclusie").value.trim(),
+      count_ok:ok, count_nok:nok, count_na:na, verdict
+    }).select().single();
+    if(e1) throw e1;
+
+    const rows = checkpoints.map((c,i)=>({ inspection_id:ins.id, title:c.title, status:c.status, note:c.note, sort:i }));
+    if(rows.length){ const { error:e2 }=await sb.from("checkpoints").insert(rows); if(e2) throw e2; }
+
+    toast("Controle opgeslagen ✓");
+    resetForm();
+  }catch(err){ console.error(err); toast("Opslaan mislukt — check je verbinding/instellingen"); }
+  finally{ btn.disabled=false; btn.innerHTML=orig; }
+});
+
+function resetForm(){
+  ["f_bedrijf","f_ref","f_project","f_locatie","f_inspecteur","f_conclusie"].forEach(id=>$(id).value="");
+  $("f_datum").value=todayISO(); $("f_monteur").value="";
+  checkpoints=[]; SEED.forEach(t=>addCheckpoint(t)); renderCheckpoints(); updateTally();
+  sctx.clearRect(0,0,sigCanvas.width,sigCanvas.height); hasSig=false;
+  window.scrollTo({top:0,behavior:"smooth"});
+}
+
+/* ---------- History ---------- */
+async function loadHistory(){
+  const box=$("histList"); box.innerHTML='<div class="empty-state">Laden…</div>'; $("histDetail").innerHTML="";
+  const { data, error } = await sb.from("inspections").select("*").order("created_at",{ascending:false}).limit(200);
+  if(error){ box.innerHTML='<div class="empty-state">Kon historie niet laden.</div>'; return; }
+  $("histCount").textContent = data.length;
+  if(!data.length){ box.innerHTML='<div class="empty-state">Nog geen opgeslagen controles.</div>'; return; }
+  box.innerHTML="";
+  data.forEach(r=>{
+    const row=document.createElement("div"); row.className="hrow";
+    const badge = r.verdict==="fail"?'<span class="badge fail">Aandacht</span>':r.verdict==="pass"?'<span class="badge pass">Akkoord</span>':'<span class="badge empty">—</span>';
+    row.innerHTML=`<div class="main"><div class="t1">${escapeHtml(r.project||"(geen project)")}</div>
+      <div class="t2">${escapeHtml(r.monteur_name||"—")} · ${fmtDate(r.inspection_date)} · ${r.count_nok||0} fout(en)</div></div>${badge}`;
+    row.addEventListener("click",()=>showHistoryDetail(r.id));
+    box.appendChild(row);
+  });
+}
+async function showHistoryDetail(id){
+  const box=$("histDetail"); box.innerHTML='<div class="card"><div class="card-body"><div class="empty-state">Laden…</div></div></div>';
+  const { data:insp } = await sb.from("inspections").select("*").eq("id",id).single();
+  const { data:cps } = await sb.from("checkpoints").select("*").eq("inspection_id",id).order("sort");
+  if(!insp){ box.innerHTML=""; return; }
+  const stTxt={ok:'<span style="color:var(--ok);font-weight:700">OK</span>',nok:'<span style="color:var(--nok);font-weight:700">Niet OK</span>',na:'<span style="color:var(--na);font-weight:700">N.v.t.</span>'};
+  let rows="";
+  (cps||[]).forEach((c,i)=>{ rows+=`<div style="padding:10px 0;border-bottom:1px solid var(--line)">
+    <div style="font-weight:600">${i+1}. ${escapeHtml(c.title||"—")} — ${c.status?stTxt[c.status]:"—"}</div>
+    ${c.note?`<div style="font-size:13px;color:var(--muted);margin-top:3px">${escapeHtml(c.note)}</div>`:""}</div>`; });
+  box.innerHTML=`<div class="card">
+    <div class="card-head"><span class="eyebrow">${escapeHtml(insp.project||"Controle")}</span>
+      <button class="ghost-btn" id="hPdf" style="margin-left:auto;color:var(--ink);border-color:var(--line)">PDF</button></div>
+    <div class="card-body">
+      <div style="font-size:14px;color:var(--muted);margin-bottom:12px">
+        ${escapeHtml(insp.monteur_name||"—")} · ${escapeHtml(insp.location||"")} · ${fmtDate(insp.inspection_date)}<br>
+        Inspecteur: ${escapeHtml(insp.inspector_name||"—")}${insp.reference?` · Ref: ${escapeHtml(insp.reference)}`:""}
+      </div>
+      <div class="tally">
+        <div class="pill ok"><div class="n">${insp.count_ok||0}</div><div class="t">OK</div></div>
+        <div class="pill nok"><div class="n">${insp.count_nok||0}</div><div class="t">Niet OK</div></div>
+        <div class="pill na"><div class="n">${insp.count_na||0}</div><div class="t">N.v.t.</div></div>
+      </div>
+      ${rows}
+      ${insp.conclusion?`<div style="margin-top:12px"><b>Conclusie:</b> ${escapeHtml(insp.conclusion)}</div>`:""}
+    </div></div>`;
+  $("hPdf").addEventListener("click",()=>{
+    const data={ meta:{bedrijf:insp.company,ref:insp.reference,project:insp.project,locatie:insp.location,
+      inspecteur:insp.inspector_name,datum:insp.inspection_date,monteur:insp.monteur_name},
+      checkpoints:(cps||[]).map(c=>({title:c.title,status:c.status,note:c.note,photos:[]})),
+      conclusie:insp.conclusion, signature:null };
+    const doc=buildPDF(data); doc.save(pdfName(insp.project,insp.inspection_date));
+  });
+}
+
+/* ---------- Analytics ---------- */
+async function loadAnalytics(){
+  const box=$("analyseBody"); box.innerHTML='<div class="empty-state">Laden…</div>';
+  const { data:insps, error } = await sb.from("inspections").select("*").order("created_at");
+  if(error){ box.innerHTML='<div class="empty-state">Kon analyse niet laden.</div>'; return; }
+  if(!insps.length){ box.innerHTML='<div class="empty-state">Nog geen data. Sla eerst een paar controles op.</div>'; return; }
+  const { data:cps } = await sb.from("checkpoints").select("title,status,inspection_id");
+
+  // Per monteur
+  const byM={};
+  insps.forEach(i=>{ const k=i.monteur_name||"Onbekend";
+    if(!byM[k]) byM[k]={name:k,controles:0,fouten:0,beoordeeld:0};
+    byM[k].controles++; byM[k].fouten+=i.count_nok||0; byM[k].beoordeeld+=(i.count_ok||0)+(i.count_nok||0)+(i.count_na||0); });
+  const monteurs=Object.values(byM).sort((a,b)=>b.fouten-a.fouten);
+  const maxF=Math.max(1,...monteurs.map(m=>m.fouten));
+
+  // Top failing checkpoints
+  const byC={};
+  (cps||[]).forEach(c=>{ if(c.status==='nok'){ const k=(c.title||"—").trim().toLowerCase();
+    if(!byC[k]) byC[k]={label:c.title||"—",n:0}; byC[k].n++; } });
+  const topC=Object.values(byC).sort((a,b)=>b.n-a.n).slice(0,8);
+
+  // Over time (per month)
+  const byMonth={};
+  insps.forEach(i=>{ const d=i.inspection_date||i.created_at; if(!d)return; const k=String(d).slice(0,7);
+    if(!byMonth[k]) byMonth[k]={m:k,controles:0,fouten:0}; byMonth[k].controles++; byMonth[k].fouten+=i.count_nok||0; });
+  const months=Object.values(byMonth).sort((a,b)=>a.m.localeCompare(b.m));
+
+  const totFout=insps.reduce((s,i)=>s+(i.count_nok||0),0);
+  const worst=monteurs[0];
+
+  box.innerHTML=`
+    ${worst && worst.fouten>0 ? `<div class="lead"><div class="cap">Meeste fouten</div><div class="big">${escapeHtml(worst.name)}</div>
+      <div class="sub">${worst.fouten} fout(en) over ${worst.controles} controle(s) · ${(worst.fouten/Math.max(1,worst.controles)).toFixed(1)} per controle</div></div>`:""}
+    <div class="kpi-row">
+      <div class="kpi"><div class="n">${insps.length}</div><div class="l">Controles</div></div>
+      <div class="kpi"><div class="n" style="color:var(--nok)">${totFout}</div><div class="l">Fouten totaal</div></div>
+    </div>
+    <div class="card"><div class="card-head"><span class="eyebrow">Fouten per monteur / chauffeur</span></div>
+      <div class="card-body"><ul class="rank" id="rankM"></ul>
+      <p class="hint">Sortering op absoluut aantal fouten. De foutratio (fouten per controle) rechts corrigeert voor wie vaker gecontroleerd is — kijk daar naar voor een eerlijke vergelijking.</p></div></div>
+    <div class="card"><div class="card-head"><span class="eyebrow">Meest afgekeurde controlepunten</span></div>
+      <div class="card-body">${topC.length?'<ul class="rank" id="rankC"></ul>':'<div class="empty-state">Nog geen afgekeurde punten.</div>'}</div></div>
+    <div class="card"><div class="card-head"><span class="eyebrow">Controles &amp; fouten per maand</span></div>
+      <div class="card-body"><div class="chart-box"><canvas id="chMonth"></canvas></div></div></div>`;
+
+  const rankM=$("rankM");
+  monteurs.forEach(m=>{
+    const rate=(m.fouten/Math.max(1,m.controles)).toFixed(1);
+    const li=document.createElement("li");
+    li.innerHTML=`<span class="name">${escapeHtml(m.name)}</span>
+      <span class="barwrap"><span class="bar" style="width:${Math.round(m.fouten/maxF*100)}%"></span></span>
+      <span class="val">${m.fouten}</span><span class="rate">${rate}/ctrl</span>`;
+    rankM.appendChild(li);
+  });
+  if(topC.length){
+    const maxC=Math.max(1,...topC.map(c=>c.n)); const rankC=$("rankC");
+    topC.forEach(c=>{ const li=document.createElement("li");
+      li.innerHTML=`<span class="name">${escapeHtml(c.label)}</span>
+        <span class="barwrap"><span class="bar" style="width:${Math.round(c.n/maxC*100)}%;background:var(--ink)"></span></span>
+        <span class="val">${c.n}</span>`; rankC.appendChild(li); });
+  }
+  drawMonthChart(months);
+}
+let monthChart=null;
+function drawMonthChart(months){
+  const ctx=$("chMonth"); if(!ctx||!window.Chart) return;
+  if(monthChart){ monthChart.destroy(); }
+  monthChart=new Chart(ctx,{ type:"bar",
+    data:{ labels:months.map(m=>m.m),
+      datasets:[
+        {label:"Controles",data:months.map(m=>m.controles),backgroundColor:"#14181F",borderRadius:4},
+        {label:"Fouten",data:months.map(m=>m.fouten),backgroundColor:"#DC2626",borderRadius:4}
+      ]},
+    options:{ responsive:true, maintainAspectRatio:false,
+      plugins:{legend:{labels:{font:{size:12}}}},
+      scales:{ y:{beginAtZero:true,ticks:{precision:0}}, x:{grid:{display:false}} } }});
+}
+
+/* ---------- PDF ---------- */
+function fmtDate(iso){ if(!iso)return "—"; const s=String(iso).slice(0,10); const [y,m,d]=s.split("-"); return d?`${d}-${m}-${y}`:s; }
+function pdfName(project,date){ const p=["Kwaliteitscontrole"]; if(project)p.push(project.replace(/[^\w\-]+/g,"_").slice(0,30)); if(date)p.push(String(date).slice(0,10)); return p.join("_")+".pdf"; }
+function currentFormData(){
+  const monteurId=$("f_monteur").value;
+  return { meta:{bedrijf:$("f_bedrijf").value.trim(),ref:$("f_ref").value.trim(),project:$("f_project").value.trim(),
+      locatie:$("f_locatie").value.trim(),inspecteur:$("f_inspecteur").value.trim(),datum:$("f_datum").value,
+      monteur: monteurId?(team.find(t=>t.id===monteurId)||{}).name:""},
+    checkpoints:checkpoints.map(c=>({title:c.title,status:c.status,note:c.note,photos:c.photos})),
+    conclusie:$("f_conclusie").value.trim(), signature:hasSig?sigCanvas.toDataURL("image/png"):null };
+}
+function buildPDF(data){
+  const { jsPDF }=window.jspdf; const doc=new jsPDF({unit:"mm",format:"a4"});
+  const PW=210,PH=297,M=16,CW=PW-M*2; let y=M;
+  const ink=[20,24,31],hi=[255,183,3],muted=[107,114,128],okC=[21,128,61],nokC=[220,38,38],naC=[90,102,117];
+  const pb=(need)=>{ if(y+need>PH-16){ doc.addPage(); y=M; } };
+
+  doc.setFillColor(...ink); doc.rect(0,0,PW,30,"F"); doc.setFillColor(...hi); doc.rect(0,30,PW,1.4,"F");
+  doc.setTextColor(255,255,255); doc.setFont("helvetica","bold"); doc.setFontSize(17); doc.text("Kwaliteitscontrole",M,15);
+  doc.setFont("helvetica","normal"); doc.setFontSize(9.5); doc.setTextColor(200,205,214); doc.text("Inspectierapport",M,21);
+  y=40;
+  const meta=[["Bedrijf",data.meta.bedrijf],["Referentie",data.meta.ref],["Project",data.meta.project],
+    ["Locatie",data.meta.locatie],["Monteur/chauffeur",data.meta.monteur],["Inspecteur",data.meta.inspecteur],["Datum",fmtDate(data.meta.datum)]];
+  doc.setFontSize(9.5); const colW=CW/2;
+  for(let i=0;i<meta.length;i+=2){ for(let j=0;j<2;j++){ const it=meta[i+j]; if(!it)continue; const x=M+j*colW;
+    doc.setTextColor(...muted); doc.setFont("helvetica","bold"); doc.text(it[0].toUpperCase(),x,y);
+    doc.setTextColor(...ink); doc.setFont("helvetica","normal"); doc.text(it[1]||"—",x,y+4.6); } y+=9; }
+  y+=2; doc.setDrawColor(226,229,234); doc.line(M,y,PW-M,y); y+=8;
+
+  let ok=0,nok=0,na=0; data.checkpoints.forEach(c=>{ if(c.status==='ok')ok++; else if(c.status==='nok')nok++; else if(c.status==='na')na++; });
+  const pills=[["OK",ok,okC],["Niet OK",nok,nokC],["N.v.t.",na,naC]], pw=(CW-8)/3;
+  pills.forEach((p,i)=>{ const x=M+i*(pw+4); doc.setDrawColor(226,229,234); doc.setFillColor(250,251,252);
+    doc.roundedRect(x,y,pw,16,2.5,2.5,"FD"); doc.setTextColor(...p[2]); doc.setFont("helvetica","bold"); doc.setFontSize(15);
+    doc.text(String(p[1]),x+pw/2,y+8,{align:"center"}); doc.setTextColor(...muted); doc.setFontSize(7.5); doc.text(p[0].toUpperCase(),x+pw/2,y+12.5,{align:"center"}); });
+  y+=22;
+  const rated=ok+nok+na;
+  if(rated>0){ const fail=nok>0; doc.setFillColor(...(fail?[254,226,226]:[220,252,231])); doc.roundedRect(M,y,CW,10,2,2,"F");
+    doc.setTextColor(...(fail?nokC:okC)); doc.setFont("helvetica","bold"); doc.setFontSize(10);
+    doc.text(fail?`Aandachtspunten: ${nok} punt(en) niet in orde`:"Akkoord — alle beoordeelde punten in orde",M+4,y+6.4); y+=15; }
+
+  doc.setFontSize(11); doc.setFont("helvetica","bold"); doc.setTextColor(...ink); pb(10); doc.text("Controlepunten",M,y); y+=6;
+  const stMap={ok:["OK",okC,[220,252,231]],nok:["NIET OK",nokC,[254,226,226]],na:["N.V.T.",naC,[237,240,244]]};
+  data.checkpoints.forEach((c,idx)=>{
+    pb(16); const titleTxt=c.title||"(geen omschrijving)";
+    doc.setFont("helvetica","bold"); doc.setFontSize(10); doc.setFillColor(...ink); doc.roundedRect(M,y-4.4,6,6,1,1,"F");
+    doc.setTextColor(...hi); doc.text(String(idx+1),M+3,y,{align:"center"}); doc.setTextColor(...ink);
+    const tl=doc.splitTextToSize(titleTxt,CW-40); doc.text(tl,M+9,y);
+    if(c.status){ const s=stMap[c.status], bw=22; doc.setFillColor(...s[2]); doc.roundedRect(PW-M-bw,y-4.4,bw,6,1.5,1.5,"F");
+      doc.setTextColor(...s[1]); doc.setFont("helvetica","bold"); doc.setFontSize(8); doc.text(s[0],PW-M-bw/2,y,{align:"center"}); }
+    y+=tl.length*5+1;
+    if(c.note){ doc.setFont("helvetica","normal"); doc.setFontSize(9); doc.setTextColor(...muted);
+      const nl=doc.splitTextToSize(c.note,CW-9); pb(nl.length*4.5+2); doc.text(nl,M+9,y); y+=nl.length*4.5+1; }
+    if(c.photos && c.photos.length){ const gap=4,pwImg=(CW-9-gap)/2; let col=0,rowH=0; const startX=M+9;
+      c.photos.forEach(ph=>{ const ih=Math.min(pwImg*ph.h/ph.w,55); if(col===0){ pb(ih+4); rowH=ih; }
+        const x=startX+col*(pwImg+gap); try{ doc.addImage(ph.dataUrl,"JPEG",x,y,pwImg,ih);}catch(e){}
+        doc.setDrawColor(226,229,234); doc.rect(x,y,pwImg,ih); rowH=Math.max(rowH,ih); col++;
+        if(col===2){ y+=rowH+gap; col=0; rowH=0; } });
+      if(col===1){ y+=rowH+gap; } }
+    y+=3; doc.setDrawColor(238,240,243); doc.line(M+9,y,PW-M,y); y+=6;
+  });
+  if(data.conclusie){ pb(20); doc.setFont("helvetica","bold"); doc.setFontSize(11); doc.setTextColor(...ink); doc.text("Conclusie",M,y); y+=6;
+    doc.setFont("helvetica","normal"); doc.setFontSize(9.5); const cl=doc.splitTextToSize(data.conclusie,CW); pb(cl.length*4.8); doc.text(cl,M,y); y+=cl.length*4.8+6; }
+  if(data.signature){ pb(34); doc.setDrawColor(226,229,234); doc.line(M,y,PW-M,y); y+=6;
+    doc.setFont("helvetica","bold"); doc.setFontSize(9); doc.setTextColor(...muted); doc.text("HANDTEKENING INSPECTEUR",M,y); y+=2;
+    try{ doc.addImage(data.signature,"PNG",M,y,50,20);}catch(e){} y+=22;
+    doc.setTextColor(...ink); doc.setFont("helvetica","normal"); doc.setFontSize(9.5);
+    doc.text(`${data.meta.inspecteur||""}${data.meta.datum?"  ·  "+fmtDate(data.meta.datum):""}`,M,y); }
+  const pages=doc.internal.getNumberOfPages();
+  for(let p=1;p<=pages;p++){ doc.setPage(p); doc.setFontSize(8); doc.setTextColor(...muted);
+    doc.text(`${data.meta.bedrijf||"Kwaliteitscontrole"}`,M,PH-8); doc.text(`Pagina ${p} / ${pages}`,PW-M,PH-8,{align:"right"}); }
+  return doc;
+}
+
+$("shareBtn").addEventListener("click", async () => {
+  if(!window.jspdf){ toast("PDF-bibliotheek nog niet geladen"); return; }
+  let doc,file;
+  try{ const data=currentFormData(); doc=buildPDF(data);
+    const blob=doc.output("blob"); file=new File([blob],pdfName(data.meta.project,data.meta.datum),{type:"application/pdf"}); }
+  catch(err){ console.error(err); toast("PDF maken mislukt"); return; }
+  if(navigator.canShare && navigator.canShare({files:[file]})){
+    try{ await navigator.share({files:[file],title:"Kwaliteitscontrole"}); }catch(e){}
+  } else { doc.save(file.name); toast("Delen niet beschikbaar — PDF gedownload"); }
+});
+
+/* ---------- Utils ---------- */
+function escapeHtml(s){ return String(s==null?"":s).replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m])); }
+</script>
+</body>
+</html>
