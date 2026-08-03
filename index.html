@@ -68,8 +68,9 @@
   .cp-num{flex:0 0 auto; width:28px; height:28px; border-radius:8px; background:var(--blue); color:#fff; font-weight:800; font-size:13px;
     display:flex; align-items:center; justify-content:center; margin-top:3px;}
   .cp-title{flex:1}
-  .cp-title input{border:none; padding:6px 4px; font-size:16px; font-weight:600}
-  .cp-title input:focus{box-shadow:none; border-bottom:2px solid var(--hi); border-radius:0}
+  .cp-title textarea{width:100%; border:none; padding:6px 4px; font-size:16px; font-weight:600; font-family:inherit;
+    line-height:1.35; resize:none; overflow:hidden; background:transparent; color:var(--text); min-height:30px}
+  .cp-title textarea:focus{outline:none; box-shadow:none; border-bottom:2px solid var(--hi); border-radius:0}
   .cp-del{flex:0 0 auto; border:none; background:transparent; color:#B4BAC3; font-size:22px; line-height:1; padding:4px 8px; cursor:pointer; border-radius:8px;}
   .cp-del:active{background:#F1F3F6; color:var(--nok)}
   .cp-body{padding:6px 12px 14px}
@@ -548,7 +549,7 @@ function renderCheckpoints(){
     el.innerHTML=`
       <div class="cp-top">
         <div class="cp-num">${i+1}</div>
-        <div class="cp-title"><input type="text" placeholder="Omschrijving controlepunt" data-role="title"></div>
+        <div class="cp-title"><textarea rows="1" placeholder="Omschrijving controlepunt" data-role="title"></textarea></div>
         <button class="cp-del" data-role="del">&times;</button>
       </div>
       <div class="cp-body">
@@ -561,7 +562,7 @@ function renderCheckpoints(){
         <div class="photo-row" data-role="photos"></div>
       </div>`;
     const ti=el.querySelector('[data-role="title"]'); ti.value=c.title;
-    ti.addEventListener("input",e=>c.title=e.target.value);
+    ti.addEventListener("input",e=>{ c.title=e.target.value; autoGrow(e.target); });
     el.querySelector('[data-role="del"]').addEventListener("click",()=>{ if(confirm("Controlepunt verwijderen?")) removeCheckpoint(c.id); });
     el.querySelectorAll('[data-role="st"]').forEach(b=>b.addEventListener("click",()=>setStatus(c.id,b.dataset.s)));
     const ne=el.querySelector('[data-role="note"]'); ne.value=c.note; ne.addEventListener("input",e=>c.note=e.target.value);
